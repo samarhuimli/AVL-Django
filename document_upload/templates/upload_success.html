@@ -1,0 +1,33 @@
+<!-- upload_success.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Téléchargement Réussi</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f8ff;
+        }
+        .success-message {
+            text-align: center;
+            padding: 20px;
+            border: 2px solid #4CAF50;
+            border-radius: 8px;
+            background-color: #e6ffe6;
+        }
+    </style>
+</head>
+<body>
+    <div class="success-message">
+        <h2>Téléchargement réussi !</h2>
+        <p>Votre fichier a été téléchargé avec succès.</p>
+        <a href="{% url 'search_upload' %}">Retourner au formulaire</a>
+    </div>
+</body>
+</html>
