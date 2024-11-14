@@ -2,21 +2,27 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from dotenv import load_dotenv
 from langchain_community.embeddings import OpenAIEmbeddings
+import pdfplumber
 
+from langchain import OpenAI
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.core.files.uploadedfile import UploadedFile
+import json
 import os
 import pinecone
 from pinecone import Pinecone, ServerlessSpec  # Import the Pinecone class
-
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 
 # Load environment variables from .env file
 load_dotenv()
+
 class AI(APIView):
     def post(self, request, *args, **kwargs):
         # Initialize the PDF loader
-        loader = PyPDFLoader("C:\\Users\\yassi\\OneDrive\\Desktop\\FL\\AVL-Django\\AI\\testbook.pdf")
+        loader = PyPDFLoader("C:\\Users\\yassi\\OneDrive\\Desktop\\FL\\AVL-Django\\AI\\RichDadPoorDad.pdf")
         pages = []
 
         # Use synchronous loading
@@ -93,3 +99,56 @@ class AI(APIView):
         else:
             print("No matches found in Pinecone results.")
             return Response({"error": "No matches found."}, status=status.HTTP_404_NOT_FOUND)
+
+    def get(self, request, *args, **kwargs):
+        chapters = self.extract_chapters_from_local_file()
+        return JsonResponse({"chapters": chapters})
+
+    def extract_chapters_from_local_file(self):
+        OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+        llm = OpenAI(api_key=OPENAI_API_KEY)
+
+        # Define the path to the PDF file
+        pdf_path = os.path.join(os.path.dirname(__file__), "RichDadPoorDad.pdf")
+
+        # Open the PDF using pdfplumber
+        with pdfplumber.open(pdf_path) as pdf_document:
+            text_chunks = []
+            chunk_size = 10  # Process 10 pages at a time
+            chapters = []
+
+            # Extract text in chunks
+            for i in range(0, len(pdf_document.pages), chunk_size):
+                chunk_text = ""
+                for page_num in range(i, min(i + chunk_size, len(pdf_document.pages))):
+                    page = pdf_document.pages[page_num]
+                    chunk_text += page.extract_text() + "\n"
+
+                text_chunks.append(chunk_text)
+
+            # Use OpenAI to identify chapters
+            for idx, chunk in enumerate(text_chunks):
+                prompt = (
+                    "Analyze the PDF to extract a structured Table of Contents. If a clear TOC is not present, identify the major sections "
+                    "and their approximate starting page numbers. Please prioritize accuracy over completeness. "
+                    f"\n\n{chunk[:4000]}"
+                )
+                response = llm(prompt=prompt)
+
+                # Parse response for chapter information (adjust parsing as needed)
+                for line in response.split("\n"):
+                    if "Page" in line or "Chapter" in line:
+                        parts = line.split("-")
+                        if len(parts) == 2:
+                            title = parts[0].strip()
+                            page_info = parts[1].strip()
+                            try:
+                                page_number = int(page_info.split()[1])
+                                chapters.append({
+                                    "title": title,
+                                    "approx_start_page": idx * chunk_size + page_number
+                                })
+                            except (IndexError, ValueError):
+                                continue
+
+        return chapters
