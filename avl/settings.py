@@ -11,9 +11,13 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 # In myproject/settings.py
 import os
+from decouple import config
 
 
+from dotenv import load_dotenv
+import os
 
+load_dotenv()
 
 from pathlib import Path
 
@@ -29,6 +33,12 @@ SECRET_KEY = 'django-insecure-i3g3c2_h8#rtguhjyq@tv6*l-d@fv_1-i%725n7h1p%rv&y^1j
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 PINECONE_API_KEY = os.getenv('PINECONE_API_KEY')
 PINECONE_ENVIRONMENT = os.getenv('PINECONE_ENVIRONMENT')
+
+
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+AWS_S3_REGION_NAME = os.getenv("AWS_S3_REGION_NAME")
+AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
