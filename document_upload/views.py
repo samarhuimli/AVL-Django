@@ -3,7 +3,10 @@ from rest_framework.response import Response
 from rest_framework import status
 from .models import Document
 from .serializers import DocumentSerializer
+from pinecone import Pinecone as PineconeClient
 
+import pinecone
+from langchain_community.vectorstores import Pinecone
 from dotenv import load_dotenv
 import os  # For handling file names
 from rest_framework.views import APIView
@@ -125,85 +128,80 @@ class DocumentUploadView(APIView):
             return Response({"error": "An unexpected error occurred.", "details": str(e)},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
-
-    # def post(self, request):
-    #     """
-    #     Gère le téléchargement d'un fichier vers AWS S3 et enregistre ses métadonnées dans la base de données.
-    #     """
-    #     # Vérifiez si les variables AWS sont correctement configurées
-    #     if not AWS_ACCESS_KEY_ID or not AWS_SECRET_ACCESS_KEY or not AWS_STORAGE_BUCKET_NAME:
-    #         return JsonResponse(
-    #             {"error": "AWS configuration missing. Check environment variables."},
-    #             status=500
-    #         )
-    #
-    #     # Récupérez le fichier téléchargé
-    #     file = request.FILES.get('file')
-    #     if not file:
-    #         return JsonResponse({"error": "No file uploaded."}, status=400)
-    #
-    #     # Valider la taille et le type du fichier
-    #     # if file.size > 10 * 1024 * 1024:  # Limite de taille : 10 Mo
-    #     #     return JsonResponse({"error": "File size exceeds 10MB limit."}, status=400)
-    #
-    #     # if file.content_type not in ["image/jpeg", "image/png", "application/pdf", "text/plain"]:
-    #     #     return JsonResponse({"error": f"Unsupported file type: {file.content_type}"}, status=400)
-    #
-    #     # Initialiser le client S3
-    #     s3 = boto3.client(
-    #         's3',
-    #         aws_access_key_id=AWS_ACCESS_KEY_ID,
-    #         aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-    #         region_name=AWS_S3_REGION_NAME,
-    #     )
-    #
-    #     try:
-    #         # Télécharger le fichier vers S3
-    #         s3.upload_fileobj(
-    #             file,
-    #             AWS_STORAGE_BUCKET_NAME,
-    #             file.name,  # Utiliser le nom du fichier comme clé dans S3
-    #             ExtraArgs={'ContentType': file.content_type}
-    #         )
-    #
-    #         # Générer l'URL du fichier
-    #         file_url = f"https://{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com/{file.name}"
-    #
-    #         # Enregistrer les métadonnées dans la base de données
-    #         serializer = DocumentSerializer(data={"name": file.name, "url": file_url})
-    #         if serializer.is_valid():
-    #             serializer.save()
-    #         else:
-    #             return JsonResponse({"error": "Failed to save document metadata.", "details": serializer.errors}, status=500)
-    #
-    #         return JsonResponse({"message": "File uploaded successfully!", "url": file_url})
-    #
-    #     except (NoCredentialsError, PartialCredentialsError):
-    #         return JsonResponse({"error": "Invalid AWS credentials. Check your keys."}, status=500)
-    #     except BotoCoreError as e:
-    #         return JsonResponse({"error": "AWS S3 error occurred.", "details": str(e)}, status=500)
-    #     except Exception as e:
-    #         return JsonResponse({"error": "An unexpected error occurred.", "details": str(e)}, status=500)
-
-    def get(self, request):
-        """
-        Récupère tous les documents enregistrés dans la base de données.
-        """
-        documents = Document.objects.all()
-        serializer = DocumentSerializer(documents, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-    # def post(self, request, *args, **kwargs):
-    #     # Crée une instance du sérialiseur avec les données de la requête
-    #     serializer = DocumentSerializer(data=request.data)
-    #     if serializer.is_valid():  # Valide les données
-    #         serializer.save()  # Enregistre le fichier dans la base de données
-    #         return Response(serializer.data, status=status.HTTP_201_CREATED)  # Répond avec les données du sérialiseur
-    #     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)  # Répond avec les erreurs de validation
-
     def get(self, request, *args, **kwargs):
-        # Récupère tous les documents existants (facultatif)
-        documents = Document.objects.all()
-        serializer = DocumentSerializer(documents, many=True)
-        return Response(serializer.data)  # Répond avec la liste des documents
+        """
+        GET method to handle:
+        1. Resume requests for a whole book or a specific chapter.
+        2. Question-Answering queries about the book.
+
+        Query Params:
+        - `user_id`: The ID of the user making the request.
+        - `book_name`: The name of the book to work with.
+        - `action_type`: `resume` or `question`
+        - For `resume`, pass `chapter` (optional) for specific chapter resume.
+        - For `question`, pass `query` to ask specific questions.
+        """
+        try:
+            # Extract the user_id and book_name from query params or headers
+            user_id = request.query_params.get('user_id')
+            book_name = request.query_params.get('book_name')
+            if not user_id or not book_name:
+                return Response({"error": "User ID and Book Name are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Construct index name based on user_id and book_name
+            index_name = book_name
+            print(f"------------------------------------------ {index_name}")  # Debugging log
+            if not index_name:
+                return Response({"error": "Index not found."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Initialize Pinecone and OpenAI
+            pinecone_client = PineconeClient(api_key=PINECONE_API_KEY, environment=PINECONE_ENVIRONMENT)
+
+            embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
+
+            # Connect to the Pinecone index
+            index = pinecone_client.Index(index_name)
+
+            # Initialize LangChain Pinecone vector store
+            book_docsearch = LangChainPinecone(index, embeddings.embed_query, text_key='text')
+
+            # Check action type
+            action_type = request.query_params.get('action_type')
+            if action_type == 'resume':
+                # Get specific chapter or entire book
+                chapter = request.query_params.get('chapter')
+                llm = OpenAI(temperature=0, openai_api_key=OPENAI_API_KEY)
+
+                if chapter:
+                    query = f"Summarize chapter {chapter} of the book."
+                else:
+                    query = "Summarize the entire book."
+
+                docs = book_docsearch.similarity_search(query)
+                chain = load_qa_chain(llm, chain_type="stuff")
+                result = chain.run(input_documents=docs, question=query)
+
+                return Response({"summary": result}, status=status.HTTP_200_OK)
+
+            elif action_type == 'question':
+                # Answer a specific question
+                query = request.query_params.get('query')
+                if not query:
+                    return Response({"error": "Query parameter is required for question action."},
+                                    status=status.HTTP_400_BAD_REQUEST)
+
+                llm = OpenAI(temperature=0, openai_api_key=OPENAI_API_KEY)
+                docs = book_docsearch.similarity_search(query)
+                chain = load_qa_chain(llm, chain_type="stuff")
+                result = chain.run(input_documents=docs, question=query)
+
+                return Response({"answer": result}, status=status.HTTP_200_OK)
+
+            else:
+                return Response({"error": "Invalid action_type. Use 'resume' or 'question'."},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            return Response({"error": "An unexpected error occurred.", "details": str(e)},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
