@@ -36,7 +36,7 @@ class AI(APIView):
             environment=PINECONE_ENVIRONMENT
         )
 
-        index_name = 'aitest'
+        index_name = 'richdadpoordad'
 
         embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
 
@@ -48,7 +48,7 @@ class AI(APIView):
                 name=index_name,
                 dimension=1536,  # Adjust the dimension to match your embeddings
                 metric='euclidean',  # You can choose another metric depending on your use case
-                spec=ServerlessSpec(cloud='aws', region='us-west-2')
+                spec=ServerlessSpec(cloud='aws', region='us-east-1')
             )
 
         # Create the document search using LangChain's Pinecone class
@@ -56,7 +56,7 @@ class AI(APIView):
                                                       index_name=index_name)
 
         llm = OpenAI(temperature=0, openai_api_key=OPENAI_API_KEY)
-        query = "give me the Contents of the book the big chapters of the book"
+        query = "give me recap of the ninth chapter of the book"
         docs = book_docsearch.similarity_search(query)
 
         chain = load_qa_chain(llm, chain_type="stuff")
