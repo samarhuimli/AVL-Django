@@ -45,7 +45,8 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
-
+MEDIA_URL = '/media/'  # URL path for serving media files
+MEDIA_ROOT = BASE_DIR / 'media'  # File system path for media files
 # Application definition
 
 INSTALLED_APPS = [

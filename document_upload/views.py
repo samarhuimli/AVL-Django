@@ -103,17 +103,8 @@ class DocumentUploadView(APIView):
             )
             print(f"------------------------------------------ {index_name}")  # Debugging log
 
-            llm = OpenAI(temperature=0, openai_api_key=OPENAI_API_KEY)
-            query = "give me a recap of the ninth chapter of the book"
-            docs = book_docsearch.similarity_search(query)
-
-            chain = load_qa_chain(llm, chain_type="stuff")
-            result = chain.run(input_documents=docs, question=query)
-            print(f"Using existing Pinecone index bf response: {index_name}")  # Debugging log
-
             return Response({
                 "message": "File processed successfully!",
-                "result": result,
                 "url": file_url,
                 "index_name": index_name
             }, status=status.HTTP_200_OK)
