@@ -31,6 +31,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-i3g3c2_h8#rtguhjyq@tv6*l-d@fv_1-i%725n7h1p%rv&y^1j'
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+TAVILY_API_KEY = os.getenv('TAVILY_API_KEY')
 PINECONE_API_KEY = os.getenv('PINECONE_API_KEY')
 PINECONE_ENVIRONMENT = os.getenv('PINECONE_ENVIRONMENT')
 

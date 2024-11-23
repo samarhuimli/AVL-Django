@@ -1,11 +1,4 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from .models import Document
-from .serializers import DocumentSerializer
 from pinecone import Pinecone as PineconeClient
-
-import pinecone
 from langchain_community.vectorstores import Pinecone
 from dotenv import load_dotenv
 import os  # For handling file names
@@ -21,7 +14,19 @@ from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.chains.question_answering import load_qa_chain
 from langchain.llms import OpenAI
 from pinecone import Pinecone, ServerlessSpec
-from avl.settings import PINECONE_API_KEY, OPENAI_API_KEY, PINECONE_ENVIRONMENT
+from avl.settings import PINECONE_API_KEY, OPENAI_API_KEY, PINECONE_ENVIRONMENT , TAVILY_API_KEY
+from tavily import TavilyClient, MissingAPIKeyError
+from langchain_community.tools import TavilySearchResults
+from functools import wraps
+
+def chain(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        print("Starting chain...")
+        result = func(*args, **kwargs)
+        print("Ending chain...")
+        return result
+    return wrapper
 
 load_dotenv()
 
@@ -30,6 +35,18 @@ AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 AWS_S3_REGION_NAME = os.getenv("AWS_S3_REGION_NAME", "us-east-1")
 AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME")
 
+tool = TavilySearchResults(
+    max_results=5,
+    search_depth="advanced",
+    include_answer=True,
+    include_raw_content=True,
+    include_images=True,
+    # include_domains=[...],
+    # exclude_domains=[...],
+    # name="...",            # overwrite default tool name
+    # description="...",     # overwrite default tool description
+    # args_schema=...,       # overwrite default args_schema: BaseModel
+)
 
 class DocumentUploadView(APIView):
     def post(self, request, *args, **kwargs):
@@ -40,13 +57,11 @@ class DocumentUploadView(APIView):
             aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
             region_name=AWS_S3_REGION_NAME,
         )
-
         # Get the uploaded file
         file = request.FILES.get('file')
         if not file:
             return Response({"error": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST)
         file.name = os.path.splitext(file.name)[0].lower().replace(' ', '_')
-
         try:
             # Upload the file to AWS S3
             s3.upload_fileobj(
@@ -55,7 +70,6 @@ class DocumentUploadView(APIView):
                 file.name,  # Use the file name as the S3 key
                 ExtraArgs={'ContentType': file.content_type}
             )
-
             # Generate the file URL
             file_url = f"https://{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com/{file.name}"
             print(f"------------------------------------------ {file.name}")  # Debugging log
@@ -119,26 +133,30 @@ class DocumentUploadView(APIView):
             return Response({"error": "An unexpected error occurred.", "details": str(e)},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    def get(self, request, *args, **kwargs):
-        """
-        GET method to handle:
-        1. Resume requests for a whole book or a specific chapter.
-        2. Question-Answering queries about the book.
+    @chain
+    def tool_chain(user_input: str, config: dict):
+        # Step 1: Prepare the input
+        input_ = {"user_input": user_input}
 
-        Query Params:
-        - `user_id`: The ID of the user making the request.
-        - `book_name`: The name of the book to work with.
-        - `action_type`: `resume` or `question`
-        - For `resume`, pass `chapter` (optional) for specific chapter resume.
-        - For `question`, pass `query` to ask specific questions.
-        """
+        # Step 2: Invoke the LLM chain
+        print("Invoking LLM chain...")
+        ai_msg = llm_chain.invoke(input_, config=config)
+
+        # Step 3: Process tool calls
+        print("Processing tool calls...")
+        tool_msgs = tool.batch(ai_msg.tool_calls, config=config)
+
+        # Step 4: Return the final output
+        return llm_chain.invoke({**input_, "messages": [ai_msg, *tool_msgs]}, config=config)
+
+    def get(self, request, *args, **kwargs):
+
         try:
             # Extract the user_id and book_name from query params or headers
             user_id = request.query_params.get('user_id')
             book_name = request.query_params.get('book_name')
             if not user_id or not book_name:
                 return Response({"error": "User ID and Book Name are required."}, status=status.HTTP_400_BAD_REQUEST)
-
             # Construct index name based on user_id and book_name
             index_name = book_name
             print(f"------------------------------------------ {index_name}")  # Debugging log
@@ -174,7 +192,72 @@ class DocumentUploadView(APIView):
 
                 return Response({"summary": result}, status=status.HTTP_200_OK)
 
+            elif action_type == 'DeepDive':
+
+                try:
+
+                    ddq_query = request.query_params.get('DDQ')
+
+                    if not ddq_query:
+                        return Response({"error": "The DDQ query parameter is required."},
+
+                                        status=status.HTTP_400_BAD_REQUEST)
+
+                    # Initialize TavilySearchResults tool
+
+                    tavily_tool = TavilySearchResults(
+
+                        max_results=5,  # Limit to top 5 results
+
+                        search_depth="advanced",
+
+                        include_answer=False,  # Not summarizing, just fetching results
+
+                        include_raw_content=True,
+
+                        include_images=True
+
+                    )
+
+                    search_results = tavily_tool.run(ddq_query)
+
+
+                    results = []
+
+                    for result in search_results:
+                        # Extract content preview (first few lines) and link
+
+                        preview = result.get("content", "").split("\n")[0:3]  # First few lines
+
+                        link = result.get("link", "No link available")
+
+                        # Append the result
+
+                        results.append({
+
+                            "preview": " ".join(preview),
+
+                            "link": link,
+
+                        })
+
+                    # Return the results as a response
+
+                    return Response({"results": results}, status=status.HTTP_200_OK)
+
+
+                except Exception as e:
+
+                    return Response({"error": "An error occurred during DeepDive processing.", "details": str(e)},
+
+                                    status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
             elif action_type == 'question':
+                try:
+                    tavily_client = TavilyClient(api_key=TAVILY_API_KEY)
+                except MissingAPIKeyError:
+                    print("API key is missing. Please provide a valid API key.")
                 # Answer a specific question
                 query = request.query_params.get('query')
                 if not query:
@@ -195,4 +278,5 @@ class DocumentUploadView(APIView):
         except Exception as e:
             return Response({"error": "An unexpected error occurred.", "details": str(e)},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
