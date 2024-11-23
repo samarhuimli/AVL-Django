@@ -133,21 +133,7 @@ class DocumentUploadView(APIView):
             return Response({"error": "An unexpected error occurred.", "details": str(e)},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    @chain
-    def tool_chain(user_input: str, config: dict):
-        # Step 1: Prepare the input
-        input_ = {"user_input": user_input}
 
-        # Step 2: Invoke the LLM chain
-        print("Invoking LLM chain...")
-        ai_msg = llm_chain.invoke(input_, config=config)
-
-        # Step 3: Process tool calls
-        print("Processing tool calls...")
-        tool_msgs = tool.batch(ai_msg.tool_calls, config=config)
-
-        # Step 4: Return the final output
-        return llm_chain.invoke({**input_, "messages": [ai_msg, *tool_msgs]}, config=config)
 
     def get(self, request, *args, **kwargs):
 
