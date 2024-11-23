@@ -211,17 +211,17 @@ class DocumentUploadView(APIView):
 
                         search_depth="advanced",
 
-                        include_answer=False,  # Not summarizing, just fetching results
+                        include_answer=True,  # Not summarizing, just fetching results
 
                         include_raw_content=True,
 
-                        include_images=True
+                        include_images=True,
+
 
                     )
 
                     search_results = tavily_tool.run(ddq_query)
-
-
+                    print(search_results)
                     results = []
 
                     for result in search_results:
@@ -229,7 +229,7 @@ class DocumentUploadView(APIView):
 
                         preview = result.get("content", "").split("\n")[0:3]  # First few lines
 
-                        link = result.get("link", "No link available")
+                        link = result.get("url", "No link available")
 
                         # Append the result
 
@@ -245,13 +245,11 @@ class DocumentUploadView(APIView):
 
                     return Response({"results": results}, status=status.HTTP_200_OK)
 
-
                 except Exception as e:
 
                     return Response({"error": "An error occurred during DeepDive processing.", "details": str(e)},
 
                                     status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
             elif action_type == 'question':
                 try:
