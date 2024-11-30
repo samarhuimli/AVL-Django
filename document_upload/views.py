@@ -19,6 +19,9 @@ from tavily import TavilyClient, MissingAPIKeyError
 from langchain_community.tools import TavilySearchResults
 from functools import wraps
 
+from document_upload.models import Book
+
+
 def chain(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -121,7 +124,11 @@ class DocumentUploadView(APIView):
 
             with open('uploaded_books.txt', 'a') as f:
                 f.write(f"UserID: {user_id}, FileURL: {file_url}\n")
-
+            Book.objects.create(
+                user=user_id,
+                url=file_url,
+                name=file.name
+            )
             return Response({
                 "message": "File processed successfully!",
                 "url": file_url,
