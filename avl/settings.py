@@ -44,8 +44,11 @@ AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
-
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    '3786-196-235-94-84.ngrok-free.app',  # Add your ngrok domain
+]
 MEDIA_URL = '/media/'  # URL path for serving media files
 MEDIA_ROOT = BASE_DIR / 'media'  # File system path for media files
 # Application definition

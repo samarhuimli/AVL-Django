@@ -57,11 +57,16 @@ class DocumentUploadView(APIView):
             aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
             region_name=AWS_S3_REGION_NAME,
         )
+        user_id = request.data.get('user_id')
+        if not user_id:
+            return Response({"error": "User ID is required."}, status=status.HTTP_400_BAD_REQUEST)
         # Get the uploaded file
         file = request.FILES.get('file')
         if not file:
             return Response({"error": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST)
+
         file.name = os.path.splitext(file.name)[0].lower().replace(' ', '_')
+
         try:
             # Upload the file to AWS S3
             s3.upload_fileobj(
@@ -70,14 +75,14 @@ class DocumentUploadView(APIView):
                 file.name,  # Use the file name as the S3 key
                 ExtraArgs={'ContentType': file.content_type}
             )
+
             # Generate the file URL
             file_url = f"https://{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com/{file.name}"
-            print(f"------------------------------------------ {file.name}")  # Debugging log
 
             if not file.name:
                 return Response({"error": "File name is missing or invalid."}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Derive index name from the file name (remove extension)
+            # Derive index name from the file name
             index_name = os.path.splitext(file.name)[0].lower().replace(' ', '_')
 
             # Indexing the file
@@ -98,24 +103,24 @@ class DocumentUploadView(APIView):
             )
 
             embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
-            print(f"Uploaded file name:;;;;;;;;;;;; {index_name}")
 
             if index_name not in pc.list_indexes().names():
-                print(f"Creating new Pinecone index: {index_name}")  # Debugging log
                 pc.create_index(
                     name=index_name,
                     dimension=1536,
                     metric='euclidean',
                     spec=ServerlessSpec(cloud='aws', region='us-east-1')
                 )
-            else:
-                print(f"Using existing Pinecone index: {index_name}")  # Debugging log
-            print(f"------------------------------------------ {index_name}")  # Debugging log
 
-            book_docsearch = LangChainPinecone.from_texts(
+            LangChainPinecone.from_texts(
                 [t.page_content for t in book_texts], embeddings, index_name=index_name
             )
-            print(f"------------------------------------------ {index_name}")  # Debugging log
+
+            # Save file URL and user ID to a text file
+
+
+            with open('uploaded_books.txt', 'a') as f:
+                f.write(f"UserID: {user_id}, FileURL: {file_url}\n")
 
             return Response({
                 "message": "File processed successfully!",
@@ -132,8 +137,6 @@ class DocumentUploadView(APIView):
         except Exception as e:
             return Response({"error": "An unexpected error occurred.", "details": str(e)},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
 
     def get(self, request, *args, **kwargs):
 
@@ -196,16 +199,10 @@ class DocumentUploadView(APIView):
                         max_results=5,  # Limit to top 5 results
 
                         search_depth="advanced",
-
                         include_answer=True,  # Not summarizing, just fetching results
-
                         include_raw_content=True,
-
                         include_images=True,
-
-
                     )
-
                     search_results = tavily_tool.run(ddq_query)
                     print(search_results)
                     results = []
