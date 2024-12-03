@@ -6,7 +6,6 @@ from rest_framework import status
 
 from document_upload.models import Book
 
-
 class UserBooksView(APIView):
     def get(self, request, *args, **kwargs):
         user_id = request.query_params.get('user_id')

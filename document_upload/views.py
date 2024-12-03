@@ -1,3 +1,5 @@
+import uuid
+
 from pinecone import Pinecone as PineconeClient
 from langchain_community.vectorstores import Pinecone
 from dotenv import load_dotenv
@@ -60,36 +62,36 @@ class DocumentUploadView(APIView):
             aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
             region_name=AWS_S3_REGION_NAME,
         )
+
         user_id = request.data.get('user_id')
         if not user_id:
             return Response({"error": "User ID is required."}, status=status.HTTP_400_BAD_REQUEST)
+
         # Get the uploaded file
         file = request.FILES.get('file')
         if not file:
             return Response({"error": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST)
 
-        file.name = os.path.splitext(file.name)[0].lower().replace(' ', '_')
+        if not file.name.endswith('.pdf'):
+            return Response({"error": "Only PDF files are allowed."}, status=status.HTTP_400_BAD_REQUEST)
+        OriginalFileName = file.name;
+        # Sanitize and make the file name unique
+        file.name = f"{file.name.lower().replace(' ', '')}"
 
         try:
             # Upload the file to AWS S3
             s3.upload_fileobj(
                 file,
                 AWS_STORAGE_BUCKET_NAME,
-                file.name,  # Use the file name as the S3 key
+                file.name,  # Use the sanitized file name as the S3 key
                 ExtraArgs={'ContentType': file.content_type}
             )
 
             # Generate the file URL
-            file_url = f"https://{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com/{file.name}"
-
-            if not file.name:
-                return Response({"error": "File name is missing or invalid."}, status=status.HTTP_400_BAD_REQUEST)
-
-            # Derive index name from the file name
-            index_name = os.path.splitext(file.name)[0].lower().replace(' ', '_')
+            file_url = f"https://{AWS_STORAGE_BUCKET_NAME}.s3.{AWS_S3_REGION_NAME}.amazonaws.com/{file.name}"
 
             # Indexing the file
-            loader = PyPDFLoader(file_url)  # Replace local file path with the URL
+            loader = PyPDFLoader(file_url)
             file_content = loader.load()
 
             text_splitter = RecursiveCharacterTextSplitter(
@@ -107,6 +109,7 @@ class DocumentUploadView(APIView):
 
             embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
 
+            index_name = os.path.splitext(file.name)[0]
             if index_name not in pc.list_indexes().names():
                 pc.create_index(
                     name=index_name,
@@ -119,24 +122,25 @@ class DocumentUploadView(APIView):
                 [t.page_content for t in book_texts], embeddings, index_name=index_name
             )
 
-            # Save file URL and user ID to a text file
-
-
+            # Save the URL and user ID for tracking purposes
             with open('uploaded_books.txt', 'a') as f:
                 f.write(f"UserID: {user_id}, FileURL: {file_url}\n")
+
+            # Save to database
             Book.objects.create(
                 user=user_id,
                 url=file_url,
-                name=file.name
+                name=OriginalFileName
             )
+
             return Response({
                 "message": "File processed successfully!",
                 "url": file_url,
                 "index_name": index_name
             }, status=status.HTTP_200_OK)
 
-        except (NoCredentialsError, PartialCredentialsError):
-            return Response({"error": "Invalid AWS credentials. Check your keys."},
+        except (NoCredentialsError, PartialCredentialsError) as e:
+            return Response({"error": "Invalid AWS credentials. Check your keys.", "details": str(e)},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except BotoCoreError as e:
             return Response({"error": "AWS S3 error occurred.", "details": str(e)},
