@@ -5,3 +5,6 @@ UserID: 123, FileURL: https://uploadsforgpt.s3.us-east-1.amazonaws.com/taf.pdf
 UserID: 90f6f29b-2aba-44d5-95df-de1a1ea1670d, FileURL: https://uploadsforgpt.s3.us-east-1.amazonaws.com/a-prayer-for-owen-meany.pdf
 UserID: 90f6f29b-2aba-44d5-95df-de1a1ea1670d, FileURL: https://uploadsforgpt.s3.us-east-1.amazonaws.com/taf.pdf
 UserID: 90f6f29b-2aba-44d5-95df-de1a1ea1670d, FileURL: https://uploadsforgpt.s3.us-east-1.amazonaws.com/absolute-power.pdf
+UserID: 6c55fc66-1c16-4830-867d-709f67b06fc5, FileURL: https://uploadsforgpt.s3.us-east-1.amazonaws.com/absolute-power.pdf
+UserID: a7e4d401-7bcf-4c46-9e61-98f18eef599a, FileURL: https://uploadsforgpt.s3.us-east-1.amazonaws.com/taf.pdf
+UserID: 969b9364-6d3b-4816-b782-946af106005d, FileURL: https://uploadsforgpt.s3.us-east-1.amazonaws.com/absolute-power.pdf

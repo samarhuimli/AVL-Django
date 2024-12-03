@@ -155,6 +155,8 @@ class DocumentUploadView(APIView):
             # Extract the user_id and book_name from query params or headers
             user_id = request.query_params.get('user_id')
             book_name = request.query_params.get('book_name')
+            book_name = book_name.lower()
+            book_name = book_name.split('.')[0]
             if not user_id or not book_name:
                 return Response({"error": "User ID and Book Name are required."}, status=status.HTTP_400_BAD_REQUEST)
             # Construct index name based on user_id and book_name
